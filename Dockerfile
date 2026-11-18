@@ -10,7 +10,7 @@
 # Build stages use full trixie; the runtime image is always trixie-slim.
 ARG OPENCLAW_RUNTIME_ASSETS=runtime-assets
 ARG OPENCLAW_INSTALLED_RUNTIME_INPUT=installed-runtime-directory-input
-ARG OPENCLAW_EXTENSIONS=""
+ARG OPENCLAW_EXTENSIONS="discord"
 ARG OPENCLAW_BUNDLED_PLUGIN_DIR=extensions
 ARG OPENCLAW_DOCKER_BUILD_NODE_OPTIONS="--max-old-space-size=8192"
 ARG OPENCLAW_DOCKER_BUILD_TSDOWN_MAX_OLD_SPACE_MB=""
@@ -529,4 +529,13 @@ RUN printf '%s\n' '#!/bin/sh' \
       'exec claude "$@"' > /usr/local/bin/cc && \
     chmod 755 /usr/local/bin/oc /usr/local/bin/cc
 
-ENTRYPOINT ["/bin/sh", "-c", "chmod go-w /data 2>/dev/null || true; install -d -o node -g node -m 700 /data/.claude 2>/dev/null && chown -R node:node /data/.claude 2>/dev/null || true; exec runuser -u node -- tini -s -- node /app/docker-entrypoint.mjs node openclaw.mjs gateway --allow-unconfigured --bind lan"]
+# git reads GitHub credentials from a node-only file on the disk; render/boot.sh
+# writes it from the GITHUB_PAT env var. Commits get a bot identity.
+RUN git config --system credential.helper 'store --file=/data/.git-credentials' && \
+    git config --system user.name 'Zaytoon Bot' && \
+    git config --system user.email 'zaytoon-bot@openclaw.invalid'
+
+# Boot wrapper: disk permissions, GitHub credentials, stale-lock recovery and
+# env-driven config (model, Discord, approvals), then the gateway as before.
+COPY render/boot.sh render/configure.mjs /usr/local/lib/render/
+ENTRYPOINT ["/bin/sh", "/usr/local/lib/render/boot.sh"]
