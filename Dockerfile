@@ -506,8 +506,14 @@ USER root
 # The official image does not ship Claude Code, which the claude-cli agent
 # runtime needs. Install the official npm package (native binary comes from the
 # matching platform package on the npm registry). Bump the ARG to upgrade.
+# The image ships npm@latest, which blocks install scripts unless allowed; the
+# package's postinstall is what unpacks the native binary. If a future npm
+# changes the flag, run that installer directly instead.
 ARG CLAUDE_CODE_VERSION=2.1.327
-RUN npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" --no-fund --no-audit && \
+RUN npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
+      --allow-scripts=@anthropic-ai/claude-code --no-fund --no-audit && \
+    (claude --version >/dev/null 2>&1 || \
+      node "$(npm root -g)/@anthropic-ai/claude-code/install.cjs") && \
     npm cache clean --force && \
     claude --version
 
