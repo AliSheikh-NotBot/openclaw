@@ -501,4 +501,4 @@ RUN COREPACK_ENABLE_NETWORK=0 PNPM_CONFIG_OFFLINE=true pnpm --version
 HEALTHCHECK --interval=3m --timeout=10s --start-period=15s --retries=3 \
   CMD ["node", "dist/docker-healthcheck.js"]
 USER root
-ENTRYPOINT ["/bin/sh", "-c", "chmod go-w /data 2>/dev/null || true; exec runuser -u node -- tini -s -- node /app/docker-entrypoint.mjs node openclaw.mjs gateway --allow-unconfigured"]
+ENTRYPOINT ["/bin/sh", "-c", "chmod go-w /data 2>/dev/null || true; exec runuser -u node -- tini -s -- node /app/docker-entrypoint.mjs node openclaw.mjs gateway --allow-unconfigured --bind lan"]
