@@ -501,4 +501,32 @@ RUN COREPACK_ENABLE_NETWORK=0 PNPM_CONFIG_OFFLINE=true pnpm --version
 HEALTHCHECK --interval=3m --timeout=10s --start-period=15s --retries=3 \
   CMD ["node", "dist/docker-healthcheck.js"]
 USER root
-ENTRYPOINT ["/bin/sh", "-c", "chmod go-w /data 2>/dev/null || true; exec runuser -u node -- tini -s -- node /app/docker-entrypoint.mjs node openclaw.mjs gateway --allow-unconfigured --bind lan"]
+
+# --- Render deployment additions ---
+# The official image does not ship Claude Code, which the claude-cli agent
+# runtime needs. Install the official npm package (native binary comes from the
+# matching platform package on the npm registry). Bump the ARG to upgrade.
+ARG CLAUDE_CODE_VERSION=2.1.327
+RUN npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" --no-fund --no-audit && \
+    npm cache clean --force && \
+    claude --version
+
+# Keep Claude Code's config/sessions on the persistent disk; the container home
+# is wiped on every deploy. Updates come from rebuilding the image instead.
+ENV CLAUDE_CONFIG_DIR=/data/.claude \
+    DISABLE_AUTOUPDATER=1
+
+# Phone-friendly helpers for Render Shell (which runs as root). Both drop to the
+# node user so files on /data stay owned by the gateway's user.
+#   oc <args>  -> openclaw CLI      cc <args>  -> claude CLI
+RUN printf '%s\n' '#!/bin/sh' \
+      ': "${OPENCLAW_STATE_DIR:=/data/.openclaw}"; : "${OPENCLAW_WORKSPACE_DIR:=/data/workspace}"' \
+      'export OPENCLAW_STATE_DIR OPENCLAW_WORKSPACE_DIR' \
+      'if [ "$(id -u)" = 0 ]; then exec runuser -u node -- openclaw "$@"; fi' \
+      'exec openclaw "$@"' > /usr/local/bin/oc && \
+    printf '%s\n' '#!/bin/sh' \
+      'if [ "$(id -u)" = 0 ]; then exec runuser -u node -- claude "$@"; fi' \
+      'exec claude "$@"' > /usr/local/bin/cc && \
+    chmod 755 /usr/local/bin/oc /usr/local/bin/cc
+
+ENTRYPOINT ["/bin/sh", "-c", "chmod go-w /data 2>/dev/null || true; install -d -o node -g node -m 700 /data/.claude 2>/dev/null && chown -R node:node /data/.claude 2>/dev/null || true; exec runuser -u node -- tini -s -- node /app/docker-entrypoint.mjs node openclaw.mjs gateway --allow-unconfigured --bind lan"]
